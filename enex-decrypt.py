@@ -34,7 +34,6 @@ import base64
 import hmac
 import hashlib
 from io import open
-
 from pbkdf2 import PBKDF2
 from Crypto.Cipher import AES
 
@@ -69,6 +68,8 @@ decrypt_texts = []
 regex = re.compile(r'(?:<en-crypt [^>]+>)(?P<b64>[a-zA-Z0-9+/=]+)(?:</en-crypt>)')
 iterator = regex.finditer(input_text)
 
+tag_attr_regex = re.compile(r'<(?P<tag>div|span)(?!>)(?! />)(?:[^>]+?)>') # reject <div /> or <span />
+
 for c in iterator:
   matches += 1
   bintxt = base64.b64decode(c.group('b64'))
@@ -89,8 +90,19 @@ for c in iterator:
     key = PBKDF2(password, salt, iterations, hashlib.sha256).read(keylength/8)
     aes = AES.new(key, AES.MODE_CBC, iv)
     decrypted = aes.decrypt(ciphertext)
-    padding_bytes = decrypted[-1]
-    plaintext = decrypted[:-ord(padding_bytes)] # remove padding
+    # import pdb; pdb.set_trace()
+    padding = decrypted[-1]
+    padding_index = decrypted.find(decrypted[-1])
+    if ord(padding) < ord(' ') and padding_index > 0:
+      plaintext = decrypted[:padding_index] # remove padding
+    else:
+      # import pdb; pdb.set_trace()
+      plaintext = decrypted
+
+    plaintext = tag_attr_regex.sub(r'<\1>', plaintext, 0)
+    plaintext = plaintext.replace('\n', '<br>')
+
+    # print("padding_index:\n{}\ndecrypted len: {}\nplaintext len: {}\nplaintext: {}\n---".format(padding_index, len(decrypted), len(plaintext), plaintext))
     decrypt_success_count += 1
     decrypt_texts.append(
       {'start': c.start(), 'end': c.end(), 'plaintext': plaintext}
